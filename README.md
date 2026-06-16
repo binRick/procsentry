@@ -83,7 +83,8 @@ sudo procsentry-gfx
 
 ### Prebuilt Linux binary
 
-A static-ish `x86_64` build is attached to each release:
+An `x86_64` build (compiled on EL9, so it runs on RHEL/Rocky/Alma 9 and newer)
+is attached to each release:
 
 ```sh
 curl -LO https://github.com/binRick/procsentry/releases/latest/download/procsentry-linux-x86_64.tar.gz

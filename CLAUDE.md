@@ -144,10 +144,78 @@ backgrounded window yields 0 frames (`screencapture` can't grab it). For
 `procsentry`, drive the demo with `--key`: a sacrificial first key, then type a
 search term (e.g. `sshd`), then Space/Down to select, then `\r` to trace.
 
+For multi-select in a recording, drive **two searches** (selections persist by
+PID, and you always select the *top* match): `type "zza"` → Space → `\b\b\b`
+(backspace ×3) → `type "zzb"` → Space → `\r`. Don't use Down to reach a second
+row — the subtree search interleaves transient children (see Gotchas).
+`record_iterm.py` here has `\b`→DEL added for the backspaces.
+
 ## Releases
 
-- Tagged `vX.Y.Z`, built and published with `gh release create`.
-- Linux binary + **RHEL9 RPM** are built in a Rocky 9 container (the dev host is
-  el10, so its native binary won't run on el9 — build el9 artifacts in a
-  `rockylinux:9` container with `gcc make rpm-build`). The RPM spec installs
-  `procsentry` and `procsentry-gfx` to `/usr/bin` via `make install`.
+Tagged `vX.Y.Z`, built and published with `gh release create`. The Linux binary
+and the **EL9 RPM** are built in a Rocky 9 container, because the dev host (mia)
+is el10 and its binaries won't run on el9.
+
+Steps:
+
+1. Bump `Version:` and add a `%changelog` entry in `procsentry.spec`; commit + push.
+2. `git archive --prefix=procsentry-X.Y.Z/ HEAD -o /tmp/procsentry-X.Y.Z.tar.gz`
+   — git archive includes the vendored `termpaint/`, so the tarball is complete.
+3. scp the tarball + `procsentry.spec` to mia, then run a build script in
+   `rockylinux:9` that: `dnf -y install gcc make rpm-build`; `make` (→ tar the
+   two binaries into `procsentry-linux-x86_64.tar.gz`); set up `~/rpmbuild`,
+   copy the tarball to SOURCES + spec to SPECS, `rpmbuild -ba`. Run it with
+   `docker run --rm -v /tmp/psbuild:/work:z rockylinux:9 bash /work/build.sh`.
+4. `gh release create vX.Y.Z --repo binRick/procsentry --target main` with the
+   `.el9.x86_64.rpm`, `.src.rpm`, and `procsentry-linux-x86_64.tar.gz`.
+
+The RPM uses `make install DESTDIR=%{buildroot} PREFIX=%{_prefix}` and
+`%global debug_package %{nil}`. Verify with
+`dnf -y install ./procsentry-*.el9.x86_64.rpm` in a fresh `rockylinux:9`.
+
+**Offline build:** termpaint is vendored (no `.gitmodules`), so a fresh clone
+builds with only `gcc`+`make` and no network. Proven with
+`docker run --network=none -v <clone>:/src:z <gcc+make image> sh -c 'cd /src && make'`.
+
+## Gotchas & operational notes (read before touching recording / releases)
+
+- **mia** = the dev/test Linux host (`ssh mia`): CentOS Stream 10 (el10), root,
+  `extrace` at `/usr/local/bin/extrace`, runs Docker (used to build el9
+  artifacts via `rockylinux:9`). `~/procsentry` there is an **rsync copy, not a
+  git repo** — `rsync -az --exclude build/ --exclude .git/ --exclude docs/ ./ mia:procsentry/`.
+- **Always `make` on mia after rsync.** The binary doesn't rebuild itself; a
+  recording once captured a *stale* binary (leftover debug text + unfiltered
+  noise) because only the source was synced. `ssh mia 'cd ~/procsentry && make'`.
+- **Recording needs the iTerm2 window frontmost the whole time.** A backgrounded
+  or focus-stolen window gives **0 frames** (the loop runs — stamps.txt fills —
+  but `screencapture -l` writes nothing). So record only when the user is away
+  from the keyboard.
+- **First keystroke is swallowed** after termpaint's auto-detection (worse in a
+  PTY). Send a harmless sacrificial key first; under type-to-search a leading
+  **backspace** (`\b`/`\x7f`) is ideal — a no-op on an empty search whether or
+  not it's swallowed (a sacrificial letter would pollute the query).
+- **Subtree search pulls in transient children.** Searching e.g. `zz` shows the
+  workload bashes *and* whatever `sleep`/`ls` they're running right now, so the
+  filtered list flickers and pressing Down can land on a short-lived child
+  (whose `extrace` then dies → "N/M live" drops). This is by design (the search
+  is subtree-aware). Reliable selection = the **top match** of a search, or
+  `Tab` for the whole subtree.
+- **Space** is special-cased in *both* the EV_KEY and EV_CHAR paths so it always
+  toggles selection and never enters the search query.
+- **extrace noise** ("process vanished before notification", "out of order
+  message on cpu N") is routine on busy hosts and filtered in `push_line`. To
+  verify the filter deterministically, point `PROCSENTRY_BIN` at a fake extrace
+  script that prints those lines plus real `<pid> <cmd>` lines, and confirm only
+  the real lines show.
+- **Demo workloads** for recordings/tests: `systemd-run --unit=zza --quiet bash
+  -c 'while :; do : ZZALPHA; ls / >/dev/null; whoami >/dev/null; sleep 0.4; done'`
+  and a `zzb`/`ZZBETA` variant (uname/id/df). Pick a filter token that **doesn't
+  collide** — `WATCH` once matched `[watchdogd]`; `zz`/`ZZA`/`ZZB` are safe. Tear
+  down with `systemctl stop zza zzb`.
+
+## Relationship to termfun
+
+procsentry was extracted from the `extracer` app in the sibling `termfun` repo.
+These improvements were made *here* and are **not yet backported** to termfun's
+`extracer`: type-to-search, Space hardening, the extrace noise filter, and the
+`Tab` select-subtree hotkey. `tui.*` and `kitty_gfx.*` are otherwise identical.

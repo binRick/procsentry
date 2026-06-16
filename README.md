@@ -1,6 +1,16 @@
-# procsentry 🛰️
+<div align="center">
 
-**Pick processes, then watch a live tree of everything they run.**
+<img src="docs/logo.svg" alt="procsentry" width="720">
+
+[![release](https://img.shields.io/github/v/release/binRick/procsentry?color=ff8f33&label=release&logo=github)](https://github.com/binRick/procsentry/releases/latest)
+[![downloads](https://img.shields.io/github/downloads/binRick/procsentry/total?color=58c8a0)](https://github.com/binRick/procsentry/releases)
+![platform](https://img.shields.io/badge/platform-Linux-1c0e22?logo=linux&logoColor=white)
+![C](https://img.shields.io/badge/C-gnu11-5a2c64)
+[![license](https://img.shields.io/badge/license-0BSD-88aaff)](LICENSE)
+
+### Pick processes, then watch a live tree of everything they run.
+
+</div>
 
 procsentry is an interactive terminal tool that pairs a fuzzy process picker
 with a live `exec()` tracer. Search for a process by name, select one or more,
@@ -13,6 +23,16 @@ happens. It's a friendly TUI front-end for
 
 > The trace pane is **Linux-only and needs root** (it uses the kernel process
 > connector). The process picker works anywhere `ps` does.
+
+```mermaid
+flowchart LR
+    L(["$ procsentry sshd"]) --> P["🔎 Picker<br/>type-to-search forest"]
+    P -. "type / ↑↓" .-> P
+    P -- "Space · Tab · click select" --> P
+    P == "Enter" ==> T["🌳 Trace<br/>live exec() tree"]
+    T -- "b · back" --> P
+    T == "q · quit" ==> X(["done"])
+```
 
 ---
 
@@ -186,6 +206,26 @@ attaching a debugger.
 ---
 
 ## How it works
+
+```mermaid
+flowchart LR
+    subgraph K["Linux kernel"]
+        PC[["proc connector<br/>PROC_EVENT_EXEC"]]
+    end
+    subgraph PS["procsentry"]
+        direction TB
+        PK["Picker<br/>ps --forest · type-to-search"]
+        TR["Trace<br/>colour-tagged exec() tree"]
+    end
+    EX["extrace -p PID<br/>one per selected process"]
+    PK -- "select PIDs, press Enter" --> TR
+    TR == "fork + exec" ==> EX
+    PC == "every exec in the subtree" ==> EX
+    EX -- "pid + command line" --> TR
+    TR --> SCR(["your terminal"])
+```
+
+Step by step:
 
 - The **picker** is `ps --forest` rendered as a tree. Each process records its
   tree depth, so a search match can pull in its whole subtree (in `ps`'s

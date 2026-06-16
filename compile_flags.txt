@@ -1,0 +1,2 @@
+-Itermpaint
+-std=gnu11

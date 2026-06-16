@@ -85,6 +85,12 @@ in from `termpaint/`. Builds warning-clean on clang (macOS) and gcc (Linux).
 - **Type-to-search**: the picker has no modes. Printable chars (EV_CHAR) append
   to the live `filter`; Space (EV_KEY) toggles selection; Backspace edits the
   search; Enter traces; Esc clears the search then quits.
+- **Select children** (`select_subtree`, bound to `Tab`): selects the
+  highlighted proc plus its whole `--forest` subtree (same contiguous
+  deeper-indent run the search uses), via the add-only `add_sel`. Capped at
+  `MAXSEL` (16).
+- **extrace noise filter** (`push_line`): drops diagnostic lines containing
+  "vanished" or "out of order" before they reach the scrollback.
 - **Nav acceleration** (`nav_step`): a single ↑/↓ tap moves one row; a sustained
   hold ramps to ~9 rows/press (`anim_t` stalls while input keeps arriving, so a
   fast hold builds the streak and deliberate taps let it lapse).

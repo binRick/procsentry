@@ -17,7 +17,7 @@
 // SPDX-License-Identifier: 0BSD
 //
 //   SELECT:  type to search · ↑/↓ move (hold = faster) · Space/click select ·
-//            wheel scroll · Enter trace · Esc clear search / quit
+//            Tab select highlighted + its children · Enter trace · Esc clear/quit
 //   TRACE:   ↑/↓ or wheel scroll · PgUp/PgDn · f follow · b back · q quit
 //
 // Build: see Makefile. procsentry = cells; procsentry-gfx = kitty backdrop.
@@ -172,6 +172,40 @@ static void toggle_sel(const proc *p) {
     sel_pid[nsel] = p->pid;
     label_copy(sel_name[nsel], sizeof(sel_name[0]), cmd_body(p->cmd));
     nsel++;
+}
+
+// Add a process to the selection (idempotent). Returns false if the selection
+// is full, so callers adding a batch can stop.
+static bool add_sel(const proc *p) {
+    if (sel_index(p->pid) >= 0) {
+        return true;
+    }
+    if (nsel >= MAXSEL) {
+        return false;
+    }
+    sel_pid[nsel] = p->pid;
+    label_copy(sel_name[nsel], sizeof(sel_name[0]), cmd_body(p->cmd));
+    nsel++;
+    return true;
+}
+
+// Select the highlighted process and its whole --forest subtree. In ps's
+// depth-first order the descendants are exactly the contiguous run of procs
+// after it indented deeper than it. Capped at MAXSEL.
+static void select_subtree(void) {
+    if (!nview) {
+        return;
+    }
+    int idx = view[hi];                 // index into procs[]
+    int base = procs[idx].indent;
+    if (!add_sel(&procs[idx])) {
+        return;
+    }
+    for (int j = idx + 1; j < nprocs && procs[j].indent > base; j++) {
+        if (!add_sel(&procs[j])) {
+            break;
+        }
+    }
 }
 
 // ---------------------------------------------------------------- sampling
@@ -565,7 +599,7 @@ static void redraw_select(void) {
 
     tui_fill(surface, 0, h - 1, w, 1, TUI_PANEL2);
     tui_text_clip(surface, 1, h - 1, w - 2,
-                  " type to search · ↑↓ move (hold = faster) · Space/click select · Enter trace · Esc clear/quit ",
+                  " type to search · ↑↓ move · Space/click select · Tab select children · Enter trace · Esc clear/quit ",
                   TUI_DIM, TUI_PANEL2);
 
     tui_backdrop(TUI_BACK_PLASMA, anim_t, BACK1, BACK2);
@@ -791,6 +825,7 @@ static void event_callback(void *userdata, termpaint_event *event) {
         else if (a == termpaint_input_home()) { hi = 0; }
         else if (a == termpaint_input_end()) { hi = nview - 1; clamp_hi(); }
         else if (a == termpaint_input_space()) { if (nview) toggle_sel(&procs[view[hi]]); }
+        else if (a == termpaint_input_tab()) { select_subtree(); }   // select highlighted + children
         else if (a == termpaint_input_backspace()) { tui_input_backspace(&filter); rebuild_view(); }
         else if (a == termpaint_input_enter()) { start_trace(); }
         else if (a == termpaint_input_escape()) {

@@ -42,7 +42,8 @@ means:
   trace shows each selected parent (`▼`) with its exec'd children nested under
   `├`, depth taken from the real process hierarchy.
 - 🎯 **Multi-select** — trace several unrelated processes at once, each in its
-  own colour.
+  own colour. `Tab` selects the highlighted process and all its children in one
+  stroke.
 - 🖱️ **Mouse + fast keys** — wheel-scroll and click-to-select; the ↑/↓ keys
   accelerate when held so a 250-process list flies by, while a single tap stays
   precise.
@@ -131,6 +132,7 @@ PROCSENTRY_CELLS=1 sudo procsentry-gfx   # force plain-text rendering
 | `↑` / `↓` | move the highlight (hold to accelerate) |
 | mouse wheel | scroll the list |
 | `Space` / click | select / deselect the highlighted process |
+| `Tab` | select the highlighted process **and all its children** (its subtree) |
 | `PgUp` / `PgDn`, `Home` / `End` | page / jump |
 | `Enter` | start tracing the selected processes |
 | `Esc` | clear the search, or quit if it's empty (`Ctrl-C` also quits) |

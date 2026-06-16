@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           procsentry
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        Interactive process picker and live exec() tracer (extrace front-end)
 
@@ -40,5 +40,9 @@ make install DESTDIR=%{buildroot} PREFIX=%{_prefix}
 %{_datadir}/doc/procsentry/LICENSE
 
 %changelog
+* Mon Jun 15 2026 procsentry authors <noreply@github.com> - 0.1.1-1
+- Tab hotkey: select the highlighted process and all its children
+- Filter out routine extrace diagnostics ("vanished", "out of order")
+
 * Mon Jun 15 2026 procsentry authors <noreply@github.com> - 0.1.0-1
 - Initial package

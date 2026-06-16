@@ -8,6 +8,14 @@
 ![C](https://img.shields.io/badge/C-gnu11-5a2c64)
 [![license](https://img.shields.io/badge/license-0BSD-88aaff)](LICENSE)
 
+<!-- repostats:start -->
+[![repostats](https://repostats.app/badge/binRick/procsentry.svg)](https://repostats.app/r/binRick/procsentry)
+[![Lines of code](https://repostats.app/badge/binRick/procsentry.svg?metric=loc)](https://repostats.app/r/binRick/procsentry)
+[![COCOMO cost](https://repostats.app/badge/binRick/procsentry.svg?metric=cost)](https://repostats.app/r/binRick/procsentry)
+[![Complexity](https://repostats.app/badge/binRick/procsentry.svg?metric=complexity)](https://repostats.app/r/binRick/procsentry)
+[![LLM regen cost](https://repostats.app/badge/binRick/procsentry.svg?metric=locomo)](https://repostats.app/r/binRick/procsentry)
+<!-- repostats:end -->
+
 ### Pick processes, then watch a live tree of everything they run.
 
 </div>

@@ -177,6 +177,24 @@ The RPM uses `make install DESTDIR=%{buildroot} PREFIX=%{_prefix}` and
 builds with only `gcc`+`make` and no network. Proven with
 `docker run --network=none -v <clone>:/src:z <gcc+make image> sh -c 'cd /src && make'`.
 
+## repostats badges
+
+The README header has a `<!-- repostats:start -->` … `<!-- repostats:end -->`
+block of [repostats.app](https://repostats.app) scc-stat badges (default, `loc`,
+`cost`/COCOMO, `complexity`, `locomo`/LLM-regen), each linking to
+`https://repostats.app/r/binRick/procsentry`. They auto-refresh as repostats
+re-indexes `main` (~1 h CDN cache). The repo was bootstrapped once with:
+
+```sh
+curl -fsS -X POST https://repostats.app/api/v1/repos \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://github.com/binRick/procsentry"}'
+```
+
+`POST` returns `202` (queued); poll `GET /api/v1/repos/binRick/procsentry/metrics.json`.
+When updating, **replace inside the markers** — don't append a second block.
+(Note the LOC count includes vendored `termpaint/`.)
+
 ## Gotchas & operational notes (read before touching recording / releases)
 
 - **mia** = the dev/test Linux host (`ssh mia`): CentOS Stream 10 (el10), root,

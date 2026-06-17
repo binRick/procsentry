@@ -14,6 +14,10 @@
 // under it, so typing `sshd` shows sshd and its child processes. Launch straight
 // into a search with `procsentry sshd` (or PROCSENTRY_FILTER=sshd).
 //
+// Pass `-c FILE` (or PROCSENTRY_CONFIG=FILE) to load a config of exclude
+// regexes — one POSIX extended regex per line, `#` comments and blank lines
+// ignored — and any exec'd command matching one is dropped from the trace.
+//
 // SPDX-License-Identifier: 0BSD
 //
 //   SELECT:  type to search · ↑/↓ move (hold = faster) · Space/click select ·
@@ -24,6 +28,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <regex.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -126,6 +131,65 @@ static long produced;               // total lines ever pushed
 static int last_root = -1;          // root of the previous pushed line (header logic)
 static bool follow = true;
 static long view_bottom;            // logical line index shown at the bottom
+
+// ---- exclude filter (config regexes) ----
+#define MAXEXCL 128
+static regex_t exclude_re[MAXEXCL];   // compiled exclude patterns
+static int nexcl;                     // number loaded
+static long filtered;                 // exec lines suppressed by an exclude regex
+
+// True if cmd matches any user-configured exclude regex.
+static bool cmd_excluded(const char *cmd) {
+    for (int i = 0; i < nexcl; i++) {
+        if (regexec(&exclude_re[i], cmd, 0, NULL, 0) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Load exclude regexes from a config file: one POSIX extended regex per line,
+// blank lines and lines beginning with '#' ignored, surrounding whitespace
+// trimmed. Patterns match against each exec'd command (the text after
+// extrace's PID). Exits on an unreadable path; warns and skips bad patterns.
+static void load_config(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        fprintf(stderr, "procsentry: cannot open config %s: %s\n", path, strerror(errno));
+        exit(1);
+    }
+    char line[LINE_MAX];
+    int lineno = 0;
+    while (fgets(line, sizeof(line), f)) {
+        lineno++;
+        char *s = line;
+        while (*s == ' ' || *s == '\t') {            // trim leading whitespace
+            s++;
+        }
+        size_t n = strlen(s);
+        while (n && (s[n - 1] == '\n' || s[n - 1] == '\r' ||
+                     s[n - 1] == ' ' || s[n - 1] == '\t')) {
+            s[--n] = 0;                              // trim trailing whitespace
+        }
+        if (!*s || *s == '#') {                      // blank line or comment
+            continue;
+        }
+        if (nexcl >= MAXEXCL) {
+            fprintf(stderr, "procsentry: %s: too many patterns (max %d), ignoring rest\n",
+                    path, MAXEXCL);
+            break;
+        }
+        int rc = regcomp(&exclude_re[nexcl], s, REG_EXTENDED | REG_NOSUB);
+        if (rc != 0) {
+            char err[160];
+            regerror(rc, &exclude_re[nexcl], err, sizeof(err));
+            fprintf(stderr, "procsentry: %s:%d: bad regex \"%s\": %s\n", path, lineno, s, err);
+            continue;
+        }
+        nexcl++;
+    }
+    fclose(f);
+}
 
 // ---------------------------------------------------------------- selection
 // Skip a leading `ps --forest` tree prefix ("  \_ ") so a selected process's
@@ -366,6 +430,20 @@ static void push_line(int r, const char *raw) {
         if (strstr(body, "vanished") || strstr(body, "out of order")) {
             return;
         }
+    } else if (nexcl > 0) {
+        // Drop exec'd commands matching a user-configured exclude regex. extrace
+        // lines are "<pid> <command…>"; match against the command after the pid.
+        const char *cmd = body;
+        while (*cmd >= '0' && *cmd <= '9') {
+            cmd++;
+        }
+        while (*cmd == ' ') {
+            cmd++;
+        }
+        if (cmd_excluded(cmd)) {
+            filtered++;
+            return;
+        }
     }
     if (r != last_root) {
         push_header(r);
@@ -425,6 +503,7 @@ static void start_trace(void) {
     }
     nroots = 0;
     produced = 0;
+    filtered = 0;
     last_root = -1;
     follow = true;
     view_bottom = 0;
@@ -616,12 +695,18 @@ static void redraw_trace(void) {
         live += !roots[i].ended;
         events += roots[i].count;
     }
-    char title2[160], right[80];
+    char title2[160], right[96];
     snprintf(title2, sizeof(title2), "tracing %d proc%s on %s",
              nroots, nroots == 1 ? "" : "s", hostname);
-    snprintf(right, sizeof(right), "%ld exec%s · %d/%d live · %s ",
-             events, events == 1 ? "" : "s", live, nroots,
-             follow ? "following" : "paused");
+    if (nexcl > 0) {
+        snprintf(right, sizeof(right), "%ld exec%s · %ld filtered · %d/%d live · %s ",
+                 events, events == 1 ? "" : "s", filtered, live, nroots,
+                 follow ? "following" : "paused");
+    } else {
+        snprintf(right, sizeof(right), "%ld exec%s · %d/%d live · %s ",
+                 events, events == 1 ? "" : "s", live, nroots,
+                 follow ? "following" : "paused");
+    }
     draw_titlebar(w, title2, right);
 
     // legend toolbar: a coloured chip per traced root
@@ -845,8 +930,26 @@ static void event_callback(void *userdata, termpaint_event *event) {
 
 int main(int argc, char **argv) {
     // Launch straight into a search: `procsentry sshd` (or PROCSENTRY_FILTER=sshd)
-    // opens pre-filtered to sshd and its subtree.
-    const char *initial = (argc > 1 && argv[1][0]) ? argv[1] : getenv("PROCSENTRY_FILTER");
+    // opens pre-filtered to sshd and its subtree. `-c FILE` / `--config FILE`
+    // (or PROCSENTRY_CONFIG) loads exclude regexes (see load_config).
+    const char *config_path = getenv("PROCSENTRY_CONFIG");
+    const char *initial = NULL;
+    for (int i = 1; i < argc; i++) {
+        const char *arg = argv[i];
+        if ((!strcmp(arg, "-c") || !strcmp(arg, "--config")) && i + 1 < argc) {
+            config_path = argv[++i];
+        } else if (!strncmp(arg, "--config=", 9)) {
+            config_path = arg + 9;
+        } else if (!initial && arg[0]) {
+            initial = arg;                  // first positional arg = initial filter
+        }
+    }
+    if (!initial) {
+        initial = getenv("PROCSENTRY_FILTER");
+    }
+    if (config_path && *config_path) {
+        load_config(config_path);           // before terminal setup so errors are visible
+    }
 #ifdef TUI_BUILD_GFX
     tui_gfx_detect("PROCSENTRY");
 #endif

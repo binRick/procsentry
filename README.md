@@ -147,6 +147,7 @@ Requirements: a C compiler and `make`. The picker builds and runs on macOS too
 ```sh
 sudo procsentry-gfx              # start; the picker opens
 sudo procsentry-gfx sshd         # start pre-filtered to sshd and its subtree
+sudo procsentry-gfx -c excludes.conf sshd   # hide exec'd commands matching the config's regexes
 PROCSENTRY_CELLS=1 sudo procsentry-gfx   # force plain-text rendering
 ```
 
@@ -175,6 +176,52 @@ exec'd children nested beneath:
 | `f` | follow (jump to and stick to the newest events) |
 | `b` | back to the picker |
 | `q` | quit |
+
+---
+
+## Excluding commands
+
+Busy hosts run a lot of housekeeping — health-check shell-outs, log rotators,
+metric collectors — that drowns out the execs you actually care about. Point
+procsentry at a **config file** of regexes and any matching exec'd command is
+dropped from the trace (the titlebar shows a running `N filtered` count):
+
+```sh
+sudo procsentry -c excludes.conf sshd                 # flag
+PROCSENTRY_CONFIG=excludes.conf sudo procsentry sshd  # or env var
+```
+
+The file is **one [POSIX extended](https://man7.org/linux/man-pages/man7/regex.7.html)
+regex per line**; blank lines and lines starting with `#` are ignored, and
+surrounding whitespace is trimmed. Each pattern is matched (case-sensitively,
+unanchored) against the **command line of every exec'd process** — the text
+`extrace` prints after the PID — so a match anywhere in the line excludes it.
+A bad regex is reported (with its line number) and skipped; an unreadable
+config path is a hard error.
+
+```sh
+# excludes.conf — hide routine noise from the trace
+
+# a specific housekeeping shell-out, e.g. bash -c 'ls /proc/*/fd'
+# (extrace prints the argv, so the '*' is literal — escape it or use .*)
+bash -c .*ls /proc/.*/fd
+
+# common low-signal commands — the trailing ( |$) keeps `ls` from also
+# matching `lsof`, etc. (portable POSIX ERE; avoid GNU-only \b here)
+^/usr/bin/(ls|cat|stat|sleep)( |$)
+^/bin/sleep [0-9]
+
+# anything launched from a monitoring agent's directory
+^/opt/(datadog|telegraf|node_exporter)/
+
+# a single program by name, wherever it lives
+(^|/)logrotate( |$)
+```
+
+> The match target is the exec'd command line *without* the leading PID, so
+> don't anchor patterns to a number. Use `^` to anchor to the start of the
+> program path (e.g. `^/usr/bin/ls`), or leave a pattern unanchored to match a
+> substring anywhere (e.g. `sleep`).
 
 ---
 
@@ -261,6 +308,7 @@ Step by step:
 | Env var | Default | Effect |
 |---|---|---|
 | `PROCSENTRY_FILTER` | unset | initial picker search (same as `procsentry <term>`) |
+| `PROCSENTRY_CONFIG` | unset | path to a config of exclude regexes (same as `-c FILE`) — see [Excluding commands](#excluding-commands) |
 | `PROCSENTRY_BIN` | `extrace` on `PATH` | path to the `extrace` binary |
 | `PROCSENTRY_CELLS` | unset | force plain-text rendering (skip kitty detection) |
 | `PROCSENTRY_MAXDIM` | `640` | kitty backdrop framebuffer size cap |

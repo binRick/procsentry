@@ -70,6 +70,7 @@ in from `termpaint/`. Builds warning-clean on clang (macOS) and gcc (Linux).
   - `PROCSENTRY_FPS` — target frame rate.
   - `PROCSENTRY_BIN` — path to the `extrace` binary (default: found on `PATH`).
   - `PROCSENTRY_FILTER` — initial picker search (same as the positional arg).
+  - `PROCSENTRY_CONFIG` — path to an exclude-regex config (same as `-c FILE`).
 
 ## How the internals work
 
@@ -91,6 +92,17 @@ in from `termpaint/`. Builds warning-clean on clang (macOS) and gcc (Linux).
   `MAXSEL` (16).
 - **extrace noise filter** (`push_line`): drops diagnostic lines containing
   "vanished" or "out of order" before they reach the scrollback.
+- **Exclude regexes** (`load_config` + `cmd_excluded`, in `push_line`): `-c
+  FILE` / `--config FILE` / `PROCSENTRY_CONFIG` loads a config of POSIX extended
+  regexes (one per line, `#` comments, whitespace trimmed, `REG_EXTENDED |
+  REG_NOSUB`). Each compiled pattern is matched against an exec'd command's text
+  *after the PID* (`push_line` skips the leading digits+space before calling
+  `cmd_excluded`); a match drops the line and bumps the `filtered` counter shown
+  in the trace titlebar. Config is loaded in `main` *before* termpaint setup so
+  compile errors/missing-file errors print to a real stderr; a bad pattern is
+  warned-and-skipped, an unreadable path is `exit(1)`. Keep documented example
+  regexes portable POSIX ERE — `\b` is a GNU/glibc extension that silently
+  fails to match under BSD regex (macOS), so use `( |$)` for word boundaries.
 - **Nav acceleration** (`nav_step`): a single ↑/↓ tap moves one row; a sustained
   hold ramps to ~9 rows/press (`anim_t` stalls while input keeps arriving, so a
   fast hold builds the streak and deliberate taps let it lapse).
@@ -235,5 +247,6 @@ When updating, **replace inside the markers** — don't append a second block.
 
 procsentry was extracted from the `extracer` app in the sibling `termfun` repo.
 These improvements were made *here* and are **not yet backported** to termfun's
-`extracer`: type-to-search, Space hardening, the extrace noise filter, and the
-`Tab` select-subtree hotkey. `tui.*` and `kitty_gfx.*` are otherwise identical.
+`extracer`: type-to-search, Space hardening, the extrace noise filter, the
+`Tab` select-subtree hotkey, and the `-c`/`PROCSENTRY_CONFIG` exclude-regex
+config. `tui.*` and `kitty_gfx.*` are otherwise identical.

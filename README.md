@@ -76,6 +76,10 @@ means:
   accelerate when held so a 250-process list flies by, while a single tap stays
   precise.
 - 🚀 **Launch into a search** — `procsentry sshd` opens pre-filtered.
+- 🔇 **Exclude noisy commands** — point `-c FILE` (or `PROCSENTRY_CONFIG`) at a
+  config of regexes and any matching exec is dropped from the trace, so the
+  housekeeping shell-outs don't bury the execs you care about. See
+  [Excluding commands](#excluding-commands).
 - 🎨 **Two render modes** — crisp text cells everywhere, plus an animated kitty
   graphics backdrop on terminals that support it (kitty, iTerm2, WezTerm, …).
 - 📦 **Self-contained** — termpaint is vendored; `make` needs nothing but a C
